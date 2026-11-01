@@ -209,7 +209,7 @@ When topics 2–7 feel comfortable, build a small AI program: a terminal chatbot
 
 ## Books and courses
 
-- Python for Everybody (also in this folder as a PDF): https://www.py4e.com
+- Python for Everybody (also in `resources/` as a PDF): https://www.py4e.com
 - Official tutorial: https://docs.python.org/3/tutorial/
 - Automate the Boring Stuff (free online): https://automatetheboringstuff.com
 - Python docs: https://docs.python.org/3/

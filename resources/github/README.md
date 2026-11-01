@@ -41,7 +41,7 @@ nebula-ai-hub_my-work/
   lectures/      lecture-01, lecture-02, ... (main.py, main_improved.py, notes.md)
   homeworks/     hw-01, hw-02, ...
   side-projects/ one folder per project
-  resources/     books, guides, links
+  resources/     books, guides (git, github, python), links
 ```
 
 First time on a new computer:

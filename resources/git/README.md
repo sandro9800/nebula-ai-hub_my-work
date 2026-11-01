@@ -133,7 +133,7 @@ If you already committed a secret (like `.env`), removing it later is not enough
 - **Merge conflict** — Git marks the file with `<<<<<<<`, `=======`, `>>>>>>>`. Edit the file to keep what you want, delete the markers, then `git add <file>` and `git commit`.
 - **`Author identity unknown`** — do the one-time setup in section 2.
 - **A file won't stop showing up as changed** — check `.gitignore`; ignoring only works for files not yet committed.
-- **Authentication failed on push** — GitHub no longer accepts account passwords. Use a personal access token or SSH (see `github.md`).
+- **Authentication failed on push** — GitHub no longer accepts account passwords. Use a personal access token or SSH (see the [GitHub guide](../github/README.md)).
 
 ## 11. Practice (do these in order)
 
