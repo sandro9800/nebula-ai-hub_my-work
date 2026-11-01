@@ -26,9 +26,3 @@ nebula-ai-hub_sandro-iobidze/
 - Python files: `snake_case.py`, simple flat scripts with short explanatory comments.
 - Start new work by copying the matching `_template` folder.
 - Never commit secrets (`.env`, API keys, real passwords).
-
-## Run a script
-
-```bash
-python lectures/lecture-01/main_improved.py
-```
