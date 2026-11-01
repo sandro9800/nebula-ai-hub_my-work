@@ -2,6 +2,11 @@
 
 This guide follows the learning roadmap in `docs/roadmap.md`. For each topic: what to learn, a tiny example, practice ideas, and where to read more. Code style follows `docs/conventions.md`: snake_case names and simple flat scripts with short comments.
 
+## Books in this folder
+
+- `Python for Everybody Exploring Data Using Python 3.pdf` — beginner-friendly, covers everything up to databases and web data (the same book as the free course at https://www.py4e.com)
+- `Introduction to Programming Using Python - 2013.docx` — a university-style introduction with exercises
+
 ## How to learn (the method that works)
 
 1. Read or watch a small piece of theory (15–20 min).
@@ -207,9 +212,9 @@ When topics 2–7 feel comfortable, build a small AI program: a terminal chatbot
 7. Telegram or Discord bot
 8. A chatbot using an AI API
 
-## Books and courses
+## Online books and courses
 
-- Python for Everybody (also in `resources/` as a PDF): https://www.py4e.com
+- Python for Everybody (free course): https://www.py4e.com
 - Official tutorial: https://docs.python.org/3/tutorial/
 - Automate the Boring Stuff (free online): https://automatetheboringstuff.com
 - Python docs: https://docs.python.org/3/
