@@ -2,11 +2,11 @@
 
 Cheatsheets, useful links, and reference material.
 
-## Guides (detailed)
+## Guides (detailed, each in its own folder)
 
-- [git.md](git.md) — Git from zero: mental model, daily workflow, commands, undoing mistakes, branches, `.gitignore`, common problems, practice
-- [github.md](github.md) — GitHub: connecting with token or SSH, pull requests, issues, README files, keeping secrets safe, profile tips
-- [python.md](python.md) — Python: step-by-step along the roadmap (functions, data structures, files, OOP, SQLite, APIs, first AI project), debugging, project ideas
+- [git/](git/README.md) — Git from zero: mental model, daily workflow, commands, undoing mistakes, branches, `.gitignore`, common problems, practice
+- [github/](github/README.md) — GitHub: connecting with token or SSH, pull requests, issues, README files, keeping secrets safe, profile tips
+- [python/](python/README.md) — Python: step-by-step along the roadmap (functions, data structures, files, OOP, SQLite, APIs, first AI project), debugging, project ideas
 
 ## Books in this folder
 
