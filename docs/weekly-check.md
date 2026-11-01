@@ -12,6 +12,7 @@ All work happens in the GitHub repo `nebula-ai-hub_my-work` (not Google Drive).
    - Fix obvious bugs (e.g. `int()` around `input()` when comparing numbers).
    - Never edit the original `main.py`.
 4. Create a short `README.md` (what it is, how to run) in any folder that lacks one.
-5. Never delete Sandro's own files. Only replace files that were created by Claude.
-6. Commit the changes with short imperative messages (see `conventions.md`), e.g. `move lecture notes into lectures/`, `add main_improved.py to lecture-02`. Never commit `.env` or secrets.
-7. Finish with a short summary in Georgian: what was moved, what was created.
+5. Update the topics tables: every lecture folder must have a row (number, topic, status) in `lectures/README.md`, and every homework folder a row in `homeworks/README.md`. Add missing rows, keep existing ones.
+6. Never delete Sandro's own files. Only replace files that were created by Claude.
+7. Commit the changes with short imperative messages (see `conventions.md`), e.g. `move lecture notes into lectures/`, `add main_improved.py to lecture-02`. Never commit `.env` or secrets.
+8. Finish with a short summary in Georgian: what was moved, what was created.
