@@ -17,3 +17,12 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local databases and uploads (generated)
+*.db
+*.db-wal
+*.db-shm
+uploads/
+
+# Test caches
+.pytest_cache/

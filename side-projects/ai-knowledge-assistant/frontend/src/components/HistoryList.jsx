@@ -8,8 +8,8 @@ export default function HistoryList({ sessionId, userId }) {
     if (!userId) return;
     fetchHistory();
     const handler = () => fetchHistory();
-    window.addEventListener("documents-changed", handler);
-    return () => window.removeEventListener("documents-changed", handler);
+    window.addEventListener("history-changed", handler);
+    return () => window.removeEventListener("history-changed", handler);
   }, [sessionId, userId]);
 
   async function fetchHistory() {

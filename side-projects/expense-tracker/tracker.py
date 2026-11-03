@@ -5,16 +5,19 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-DATA_FILE = Path("expenses.json")
+# next to tracker.py, so the data is found no matter where the command is run from
+DATA_FILE = Path(__file__).resolve().with_name("expenses.json")
 
 # Try to import rich for nicer output; fall back to plain text if not installed.
 try:
     from rich.console import Console
+    from rich.markup import escape
     from rich.table import Table
 
     _console = Console()
@@ -22,6 +25,17 @@ try:
 except ImportError:  # pragma: no cover - depends on user environment
     _console = None  # type: ignore
     HAS_RICH = False
+
+    def escape(text: str) -> str:  # type: ignore
+        return text
+
+
+def _validate_date(value: str) -> str:
+    """Return the date if it is a real YYYY-MM-DD date, otherwise raise ValueError."""
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        raise ValueError("Date must be a real date in YYYY-MM-DD format.") from None
 
 
 class ExpenseTracker:
@@ -40,7 +54,13 @@ class ExpenseTracker:
                 data = json.load(f)
             return data if isinstance(data, list) else []
         except (json.JSONDecodeError, OSError):
-            print(f"Warning: could not read {self.data_file}. Starting fresh.")
+            # keep the unreadable file instead of overwriting it with an empty list later
+            backup = self.data_file.with_name(self.data_file.name + ".bak")
+            try:
+                self.data_file.replace(backup)
+                print(f"Warning: could not read {self.data_file.name}. Saved it as {backup.name} and started fresh.")
+            except OSError:
+                print(f"Warning: could not read {self.data_file.name}. Starting fresh.")
             return []
 
     def _save(self) -> None:
@@ -61,15 +81,26 @@ class ExpenseTracker:
         date: Optional[str] = None,
     ) -> dict:
         """Add a new expense and return it."""
-        if amount <= 0:
+        try:
+            amount = round(float(amount), 2)
+        except (TypeError, ValueError):
+            raise ValueError("Amount must be a number.") from None
+        if not math.isfinite(amount) or amount <= 0:
             raise ValueError("Amount must be greater than zero.")
+
+        category = category.strip()
+        description = description.strip()
+        if not category:
+            raise ValueError("Category cannot be empty.")
+        if not description:
+            raise ValueError("Description cannot be empty.")
 
         expense = {
             "id": self._next_id(),
-            "amount": round(float(amount), 2),
-            "category": category.strip(),
-            "description": description.strip(),
-            "date": date or datetime.now().strftime("%Y-%m-%d"),
+            "amount": amount,
+            "category": category,
+            "description": description,
+            "date": _validate_date(date) if date else datetime.now().strftime("%Y-%m-%d"),
         }
         self.expenses.append(expense)
         self._save()
@@ -104,6 +135,10 @@ class ExpenseTracker:
         end_date: Optional[str] = None,
     ) -> List[dict]:
         """Return expenses matching the given filters."""
+        if start_date:
+            start_date = _validate_date(start_date)
+        if end_date:
+            end_date = _validate_date(end_date)
         results = []
         for e in self.expenses:
             if category and e.get("category", "").lower() != category.lower():
@@ -133,15 +168,15 @@ def _print_expense(e: dict) -> None:
     if HAS_RICH and _console is not None:
         _console.print(
             f"[cyan]ID {e.get('id')}[/cyan] | "
-            f"[green]{e.get('date')}[/green] | "
-            f"[magenta]{e.get('category')}[/magenta] | "
+            f"[green]{escape(str(e.get('date')))}[/green] | "
+            f"[magenta]{escape(str(e.get('category')))}[/magenta] | "
             f"[yellow]${float(e.get('amount', 0)):.2f}[/yellow] | "
-            f"{e.get('description')}"
+            f"{escape(str(e.get('description')))}"
         )
     else:
         print(
-            f"  ID {e.get('id'):<3} | {e.get('date'):<10} | "
-            f"{e.get('category'):<12} | ${float(e.get('amount', 0)):<8.2f} | {e.get('description')}"
+            f"  ID {str(e.get('id')):<3} | {str(e.get('date')):<10} | "
+            f"{str(e.get('category')):<12} | ${float(e.get('amount', 0)):<8.2f} | {e.get('description')}"
         )
 
 
@@ -162,10 +197,10 @@ def _print_table(title: str, expenses: List[dict]) -> None:
         for e in expenses:
             table.add_row(
                 str(e.get("id", "")),
-                str(e.get("date", "")),
-                str(e.get("category", "")),
+                escape(str(e.get("date", ""))),
+                escape(str(e.get("category", ""))),
                 f"${float(e.get('amount', 0)):.2f}",
-                str(e.get("description", "")),
+                escape(str(e.get("description", ""))),
             )
         _console.print(table)
     else:
@@ -216,16 +251,24 @@ def cmd_summary(args: argparse.Namespace, tracker: ExpenseTracker) -> None:
 
 
 def cmd_filter(args: argparse.Namespace, tracker: ExpenseTracker) -> None:
-    expenses = tracker.filter_expenses(
-        category=args.category,
-        start_date=args.start,
-        end_date=args.end,
-    )
+    try:
+        expenses = tracker.filter_expenses(
+            category=args.category,
+            start_date=args.start,
+            end_date=args.end,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
     _print_table("Filtered Expenses", expenses)
 
 
 def cmd_export(args: argparse.Namespace, tracker: ExpenseTracker) -> None:
-    count = tracker.export_csv(Path(args.file))
+    try:
+        count = tracker.export_csv(Path(args.file))
+    except OSError as exc:
+        print(f"Error: could not write {args.file}: {exc.strerror or exc}")
+        sys.exit(1)
     print(f"Exported {count} expense(s) to {args.file}")
 
 

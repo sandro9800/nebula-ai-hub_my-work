@@ -6,11 +6,13 @@ export default function DocumentUpload({ userId }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+    setIsError(false);
 
     const formData = new FormData();
     if (title) formData.append("title", title);
@@ -30,9 +32,11 @@ export default function DocumentUpload({ userId }) {
         setFile(null);
         window.dispatchEvent(new Event("documents-changed"));
       } else {
+        setIsError(true);
         setMessage(data.error || "Failed to add document");
       }
     } catch (err) {
+      setIsError(true);
       setMessage("Network error");
     } finally {
       setLoading(false);
@@ -81,7 +85,7 @@ export default function DocumentUpload({ userId }) {
         </button>
       </form>
       {message && (
-        <div className={`mt-3 p-3 rounded-md text-sm ${message.includes("Error") || message.includes("error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+        <div className={`mt-3 p-3 rounded-md text-sm ${isError ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
           {message}
         </div>
       )}

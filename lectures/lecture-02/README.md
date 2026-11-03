@@ -4,7 +4,9 @@ Practice exercises: minutes converter, cinema ticket calculator, positive/negati
 
 ## Run
 
+From the repository root:
+
 ```bash
-pip install python-dateutil
+pip install -r requirements.txt
 python lectures/lecture-02/main_improved.py
 ```

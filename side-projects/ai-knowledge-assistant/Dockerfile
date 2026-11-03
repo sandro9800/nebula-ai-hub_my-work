@@ -21,13 +21,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY kb.py app.py ./
 COPY templates ./templates
 
-# Uploads directory
-RUN mkdir -p uploads
+# Uploads and database directories
+RUN mkdir -p uploads data
 
 EXPOSE 5000
 
 ENV PORT=5000
+ENV HOST=0.0.0.0
+ENV KNOWLEDGE_DB=/app/data/knowledge.db
 ENV OLLAMA_URL=http://host.docker.internal:11434/api/generate
 ENV OLLAMA_MODEL=llama3.2
 
-CMD ["python", "app.py"]
+CMD ["sh", "-c", "gunicorn -w 1 --threads 4 --timeout 120 -b 0.0.0.0:${PORT} app:app"]

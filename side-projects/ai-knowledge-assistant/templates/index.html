@@ -9,25 +9,47 @@
   textarea, input { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 6px; }
   button { background: #2563eb; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; }
   button:hover { background: #1d4ed8; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background: #fafafa; }
+  button.secondary { background: #6b7280; }
   .source { font-size: 0.875rem; color: #666; margin-top: 0.5rem; }
   .answer { white-space: pre-wrap; background: #fff; border-left: 3px solid #2563eb; padding: 0.75rem; margin-top: 0.5rem; }
+  .error { color: #b91c1c; }
+  .top { display: flex; justify-content: space-between; align-items: center; }
   h1 { font-size: 1.5rem; margin-bottom: 1rem; }
   label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
 </style>
 </head>
 <body>
-<h1>🧠 Personal Knowledge Assistant</h1>
+<div class="top">
+  <h1>🧠 Personal Knowledge Assistant</h1>
+  {% if authenticated %}
+  <div><span>{{ username }}</span> <button class="secondary" id="logoutBtn" type="button">Logout</button></div>
+  {% endif %}
+</div>
 
+{% if not authenticated %}
+<section>
+  <h2>Login or register</h2>
+  <form id="authForm">
+    <label>Username</label>
+    <input type="text" name="username" required autocomplete="username">
+    <label>Password (at least 6 characters to register)</label>
+    <input type="password" name="password" required autocomplete="current-password">
+    <button type="submit">Login</button>
+    <button type="button" class="secondary" id="registerBtn">Register</button>
+    <p class="error" id="authMsg"></p>
+  </form>
+</section>
+{% else %}
 <section>
   <h2>Add a document</h2>
   <form id="addForm">
     <label>Title</label>
-    <input type="text" name="title" required>
-    <label>Content (or upload .txt/.md)</label>
-    <textarea name="content" rows="6" required></textarea>
-    <input type="file" name="file" accept=".txt,.md">
+    <input type="text" name="title">
+    <label>Content (or upload a .txt, .md or .pdf file)</label>
+    <textarea name="content" rows="6"></textarea>
+    <input type="file" name="file" accept=".txt,.md,.pdf">
     <button type="submit">Add</button>
+    <p class="error" id="addMsg"></p>
   </form>
 </section>
 
@@ -49,35 +71,86 @@
     {% endfor %}
   </ul>
 </section>
+{% endif %}
 
 <script>
-document.getElementById('addForm').onsubmit = async (e) => {
-  e.preventDefault();
-  const form = new FormData(e.target);
-  const res = await fetch('/api/documents', { method: 'POST', body: form });
-  if (res.ok) {
-    const data = await res.json();
-    const li = document.createElement('li');
-    li.textContent = `[${data.id}] ${data.title}`;
-    document.getElementById('docList').prepend(li);
-    e.target.reset();
-  } else {
-    alert('Failed to add document');
-  }
-};
+async function postJson(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  let data = {};
+  try { data = await res.json(); } catch (err) { /* not JSON */ }
+  return { ok: res.ok, data: data };
+}
 
-document.getElementById('askForm').onsubmit = async (e) => {
-  e.preventDefault();
-  const form = new FormData(e.target);
-  const res = await fetch('/api/ask', { method: 'POST', body: form });
-  const data = await res.json();
-  const box = document.getElementById('result');
-  box.innerHTML = '<div class="answer">' + data.answer.replace(/\n/g, '<br>') + '</div>';
-  if (data.sources?.length) {
-    box.innerHTML += '<div class="source"><strong>Sources:</strong> ' +
-      data.sources.map(s => `[${s.id}] ${s.title}`).join(', ') + '</div>';
+const authForm = document.getElementById('authForm');
+if (authForm) {
+  async function sendAuth(path) {
+    const form = new FormData(authForm);
+    const out = await postJson(path, { username: form.get('username'), password: form.get('password') });
+    if (out.ok) {
+      location.reload();
+    } else {
+      document.getElementById('authMsg').textContent = out.data.error || 'Something went wrong';
+    }
   }
-};
+  authForm.onsubmit = (e) => { e.preventDefault(); sendAuth('/api/auth/login'); };
+  document.getElementById('registerBtn').onclick = () => sendAuth('/api/auth/register');
+}
+
+const logoutBtn = document.getElementById('logoutBtn');
+if (logoutBtn) {
+  logoutBtn.onclick = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    location.reload();
+  };
+}
+
+const addForm = document.getElementById('addForm');
+if (addForm) {
+  addForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('addMsg');
+    msg.textContent = '';
+    const res = await fetch('/api/documents', { method: 'POST', body: new FormData(addForm) });
+    let data = {};
+    try { data = await res.json(); } catch (err) { /* not JSON */ }
+    if (res.ok) {
+      const li = document.createElement('li');
+      li.textContent = '[' + data.id + '] ' + data.title;
+      document.getElementById('docList').prepend(li);
+      addForm.reset();
+    } else {
+      msg.textContent = data.error || 'Failed to add document';
+    }
+  };
+}
+
+const askForm = document.getElementById('askForm');
+if (askForm) {
+  const sessionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+  askForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const box = document.getElementById('result');
+    box.textContent = 'Thinking...';
+    const query = new FormData(askForm).get('query');
+    const out = await postJson('/api/ask', { query: query, session_id: sessionId });
+    box.textContent = '';
+    const answer = document.createElement('div');
+    answer.className = 'answer';
+    // textContent (not innerHTML), so document text can never run as HTML
+    answer.textContent = out.ok ? out.data.answer : (out.data.error || 'Something went wrong');
+    box.appendChild(answer);
+    if (out.ok && out.data.sources && out.data.sources.length) {
+      const src = document.createElement('div');
+      src.className = 'source';
+      src.textContent = 'Sources: ' + out.data.sources.map((s) => '[' + s.id + '] ' + s.title).join(', ');
+      box.appendChild(src);
+    }
+  };
+}
 </script>
 </body>
 </html>

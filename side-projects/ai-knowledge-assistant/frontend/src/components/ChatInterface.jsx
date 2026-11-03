@@ -22,6 +22,14 @@ export default function ChatInterface({ sessionId, userId }) {
       });
       const data = await res.json();
 
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: data.error || "Something went wrong." },
+        ]);
+        return;
+      }
+
       setMessages((prev) => [
         ...prev,
         {
@@ -30,6 +38,8 @@ export default function ChatInterface({ sessionId, userId }) {
           sources: data.sources || [],
         },
       ]);
+      // tell the history list to reload
+      window.dispatchEvent(new Event("history-changed"));
     } catch (err) {
       setMessages((prev) => [
         ...prev,

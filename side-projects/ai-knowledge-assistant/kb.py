@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
 import os
+import shlex
+import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
@@ -14,21 +16,32 @@ from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 from werkzeug.security import generate_password_hash, check_password_hash
 
-DB_PATH = Path("knowledge.db")
+DB_PATH = Path(os.environ.get("KNOWLEDGE_DB", "knowledge.db"))
 EMBED_MODEL = "all-MiniLM-L6-v2"
 CHUNK_SIZE = 500      # characters per chunk
 CHUNK_OVERLAP = 50    # overlap between chunks
+MIN_PASSWORD_LENGTH = 6
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
 
 
 class KnowledgeBase:
     def __init__(self, db_path: Path = DB_PATH) -> None:
-        self.db_path = db_path
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._local = threading.local()
         self.conn.execute("PRAGMA journal_mode=WAL")
         self._init_db()
         self.model = SentenceTransformer(EMBED_MODEL)
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        """One SQLite connection per thread (the web server handles requests in threads)."""
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(self.db_path)
+            self._local.conn = conn
+        return conn
 
     # ------------------------------------------------------------------
     # Schema
@@ -86,15 +99,23 @@ class KnowledgeBase:
     # ------------------------------------------------------------------
     def create_user(self, username: str, password: str) -> int:
         """Create a new user. Returns user id or raises ValueError if exists."""
+        username = username.strip()
+        if not username:
+            raise ValueError("Username is required")
+        if len(password) < MIN_PASSWORD_LENGTH:
+            raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
         if self.get_user_by_username(username):
             raise ValueError("Username already exists")
         pw_hash = generate_password_hash(password)
         now = datetime.now(timezone.utc).isoformat()
-        cur = self.conn.execute(
-            "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-            (username, pw_hash, now),
-        )
-        self.conn.commit()
+        try:
+            cur = self.conn.execute(
+                "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+                (username, pw_hash, now),
+            )
+            self.conn.commit()
+        except sqlite3.IntegrityError:
+            raise ValueError("Username already exists") from None
         return int(cur.lastrowid)
 
     def get_user_by_username(self, username: str) -> Optional[Tuple]:
@@ -136,28 +157,38 @@ class KnowledgeBase:
         source_type: str = "text",
     ) -> int:
         """Store a document, chunk it, embed each chunk, and save."""
-        now = datetime.now(timezone.utc).isoformat()
-        cur = self.conn.execute(
-            """
-            INSERT INTO documents (user_id, title, source_type, created_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (user_id, title, source_type, now),
-        )
-        doc_id = int(cur.lastrowid)
+        if not content.strip():
+            raise ValueError("Document content is empty")
 
+        # embed first, so nothing is written if the model fails
         chunks = self._chunk_text(content)
-        for idx, chunk in enumerate(chunks):
-            embedding = self.model.encode(chunk, convert_to_numpy=True)
-            blob = embedding.tobytes()
-            self.conn.execute(
+        embeddings = [
+            self.model.encode(chunk, convert_to_numpy=True).astype(np.float32)
+            for chunk in chunks
+        ]
+
+        now = datetime.now(timezone.utc).isoformat()
+        try:
+            cur = self.conn.execute(
                 """
-                INSERT INTO document_chunks (document_id, chunk_index, content, embedding)
+                INSERT INTO documents (user_id, title, source_type, created_at)
                 VALUES (?, ?, ?, ?)
                 """,
-                (doc_id, idx, chunk, blob),
+                (user_id, title, source_type, now),
             )
-        self.conn.commit()
+            doc_id = int(cur.lastrowid)
+            for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+                self.conn.execute(
+                    """
+                    INSERT INTO document_chunks (document_id, chunk_index, content, embedding)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (doc_id, idx, chunk, embedding.tobytes()),
+                )
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
         return doc_id
 
     def add_pdf(self, user_id: int, title: str, file_path: Path) -> int:
@@ -180,12 +211,22 @@ class KnowledgeBase:
         ).fetchall()
 
     def delete_document(self, user_id: int, doc_id: int) -> bool:
-        cur = self.conn.execute(
-            "DELETE FROM documents WHERE id = ? AND user_id = ?",
+        owned = self.conn.execute(
+            "SELECT 1 FROM documents WHERE id = ? AND user_id = ?",
             (doc_id, user_id),
-        )
-        self.conn.commit()
-        return cur.rowcount > 0
+        ).fetchone()
+        if not owned:
+            return False
+        try:
+            # remove everything that belongs to the document, not only the document row
+            self.conn.execute("DELETE FROM conversation_sources WHERE document_id = ?", (doc_id,))
+            self.conn.execute("DELETE FROM document_chunks WHERE document_id = ?", (doc_id,))
+            self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        return True
 
     # ------------------------------------------------------------------
     # Semantic Search (across chunks)
@@ -251,7 +292,7 @@ class KnowledgeBase:
             "ANSWER:"
         )
 
-        answer = self._query_ollama(prompt)
+        answer = self._query_ollama(prompt, fallback=top[0])
         sources = [{"id": doc_id, "title": title} for _, doc_id, title, _ in top]
         self._save_conversation(user_id, session_id, query, answer, sources)
         return {"answer": answer, "sources": sources}
@@ -292,7 +333,7 @@ class KnowledgeBase:
             SELECT c.id, c.question, c.answer, c.created_at
             FROM conversations c
             WHERE c.user_id = ? AND c.session_id = ?
-            ORDER BY c.created_at DESC
+            ORDER BY c.id DESC
             LIMIT ?
             """,
             (user_id, session_id, limit),
@@ -322,7 +363,9 @@ class KnowledgeBase:
     # ------------------------------------------------------------------
     # LLM
     # ------------------------------------------------------------------
-    def _query_ollama(self, prompt: str) -> str:
+    def _query_ollama(self, prompt: str, fallback: Tuple[float, int, str, str]) -> str:
+        """Ask Ollama. If it is unavailable, return the best excerpt that was already found
+        for this user (never search again, so no other user's documents can leak)."""
         try:
             resp = requests.post(
                 OLLAMA_URL,
@@ -334,17 +377,18 @@ class KnowledgeBase:
         except Exception:
             pass
 
-        top = self.search(user_id=1, query=prompt, top_k=1)  # fallback only
-        if top:
-            _, _, title, content = top[0]
-            return (
-                "Ollama is not available. Here is the most relevant excerpt:\n\n"
-                f"Source: {title}\n{content[:800]}..."
-            )
-        return "No answer available."
+        _, _, title, content = fallback
+        excerpt = content[:800] + ("..." if len(content) > 800 else "")
+        return (
+            "Ollama is not available. Here is the most relevant excerpt:\n\n"
+            f"Source: {title}\n{excerpt}"
+        )
 
     def close(self) -> None:
-        self.conn.close()
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
 
 def main() -> None:
@@ -365,9 +409,14 @@ def main() -> None:
         if user_input in {"quit", "exit"}:
             break
 
-        parts = user_input.split(None, 2)
+        # shlex lets titles and questions be quoted: add "Meeting Notes" notes.txt
+        try:
+            parts = shlex.split(user_input)
+        except ValueError as exc:
+            print(f"Error: {exc}")
+            continue
         cmd = parts[0].lower()
-        args = parts[1:] if len(parts) > 1 else []
+        args = parts[1:]
 
         if cmd == "register":
             if len(args) < 2:
@@ -433,7 +482,7 @@ def main() -> None:
             if not args:
                 print("Usage: ask <question>")
                 continue
-            result = kb.ask(current_user, args[0])
+            result = kb.ask(current_user, " ".join(args))
             print("\n" + result["answer"])
             if result["sources"]:
                 print("\nSources:")
@@ -448,7 +497,8 @@ def main() -> None:
                 print(f"\n[{item['created_at']}] Q: {item['question']}")
                 print(f"         A: {item['answer'][:200]}...")
                 if item["sources"]:
-                    print(f"         Sources: {', '.join(f'[{s['id']}] {s['title']}' for s in item['sources'])}")
+                    names = ", ".join("[{}] {}".format(s["id"], s["title"]) for s in item["sources"])
+                    print(f"         Sources: {names}")
 
         else:
             print("Unknown command. Try: register, login, add, pdf, ask, list, history, quit")

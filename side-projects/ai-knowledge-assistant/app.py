@@ -2,17 +2,36 @@
 
 from __future__ import annotations
 
-import uuid
 import os
+import uuid
 from pathlib import Path
+from typing import Optional
+
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
 
 from kb import KnowledgeBase
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
-CORS(app, supports_credentials=True)
+DEFAULT_SECRET = "dev-secret-change-in-production"
+UPLOAD_DIR = Path("uploads")
+
+app = Flask(__name__, template_folder="templates")
+app.secret_key = os.environ.get("SECRET_KEY", DEFAULT_SECRET)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB per upload
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+if app.secret_key == DEFAULT_SECRET:
+    print("WARNING: using the default SECRET_KEY. Set SECRET_KEY before deploying.")
+
+# Only the listed origins may call the API with the login cookie.
+# (The Vite dev server proxies /api, so the default is enough for local work.)
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
+CORS(app, supports_credentials=True, origins=ALLOWED_ORIGINS)
 
 kb = KnowledgeBase()
 
@@ -21,7 +40,9 @@ def current_user_id() -> Optional[int]:
     return session.get("user_id")
 
 
-from typing import Optional  # noqa: E402
+def clean(value) -> str:
+    """Strip a JSON/form value; anything that is not text becomes an empty string."""
+    return value.strip() if isinstance(value, str) else ""
 
 
 # ------------------------------------------------------------------
@@ -30,26 +51,27 @@ from typing import Optional  # noqa: E402
 @app.route("/api/auth/register", methods=["POST"])
 def register():
     data = request.get_json(silent=True) or {}
-    username = data.get("username", "").strip()
-    password = data.get("password", "")
+    username = clean(data.get("username"))
+    password = data.get("password") if isinstance(data.get("password"), str) else ""
 
     if not username or not password:
         return jsonify({"error": "Username and password required"}), 400
 
     try:
         user_id = kb.create_user(username, password)
-        session["user_id"] = user_id
-        session["username"] = username
-        return jsonify({"user_id": user_id, "username": username})
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+
+    session["user_id"] = user_id
+    session["username"] = username
+    return jsonify({"user_id": user_id, "username": username})
 
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
     data = request.get_json(silent=True) or {}
-    username = data.get("username", "").strip()
-    password = data.get("password", "")
+    username = clean(data.get("username"))
+    password = data.get("password") if isinstance(data.get("password"), str) else ""
 
     user_id = kb.verify_password(username, password)
     if not user_id:
@@ -95,33 +117,42 @@ def add_document():
     if not uid:
         return jsonify({"error": "Not authenticated"}), 401
 
-    title = request.form.get("title", "").strip()
-    content = request.form.get("content", "").strip()
+    title = clean(request.form.get("title"))
+    content = clean(request.form.get("content"))
     file = request.files.get("file")
 
     if file and file.filename:
+        # the file name is only used for the default title, never as a path on disk
+        stem = Path(file.filename).stem
         filename = file.filename.lower()
+
         if filename.endswith(".pdf"):
-            tmp = Path("uploads") / file.filename
-            tmp.parent.mkdir(exist_ok=True)
+            UPLOAD_DIR.mkdir(exist_ok=True)
+            tmp = UPLOAD_DIR / f"{uuid.uuid4().hex}.pdf"
             file.save(tmp)
             try:
-                doc_id = kb.add_pdf(uid, title or Path(file.filename).stem, tmp)
+                doc_id = kb.add_pdf(uid, title or stem, tmp)
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+            except Exception:
+                return jsonify({"error": "Could not read this PDF."}), 400
             finally:
                 tmp.unlink(missing_ok=True)
-            return jsonify({
-                "id": doc_id,
-                "title": title or Path(file.filename).stem,
-                "source_type": "pdf",
-            })
-        else:
-            content = file.read().decode("utf-8", errors="ignore")
-            title = title or Path(file.filename).stem
+            return jsonify({"id": doc_id, "title": title or stem, "source_type": "pdf"})
+
+        if not filename.endswith((".txt", ".md")):
+            return jsonify({"error": "Only .txt, .md and .pdf files are supported"}), 400
+
+        content = file.read().decode("utf-8", errors="ignore").strip()
+        title = title or stem
 
     if not title or not content:
         return jsonify({"error": "Title and content are required"}), 400
 
-    doc_id = kb.add_document(uid, title, content)
+    try:
+        doc_id = kb.add_document(uid, title, content)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"id": doc_id, "title": title, "source_type": "text"})
 
 
@@ -145,8 +176,8 @@ def ask():
         return jsonify({"error": "Not authenticated"}), 401
 
     data = request.get_json(silent=True) or {}
-    query = data.get("query", "").strip()
-    session_id = data.get("session_id") or str(uuid.uuid4())
+    query = clean(data.get("query"))
+    session_id = clean(data.get("session_id")) or str(uuid.uuid4())
 
     if not query:
         return jsonify({"error": "Query is required"}), 400
@@ -169,7 +200,10 @@ def history():
         return jsonify({"error": "Not authenticated"}), 401
 
     session_id = request.args.get("session_id", "default")
-    limit = int(request.args.get("limit", 20))
+    try:
+        limit = max(1, min(int(request.args.get("limit", 20)), 100))
+    except ValueError:
+        limit = 20
     return jsonify(history=kb.get_conversation_history(uid, session_id=session_id, limit=limit))
 
 
@@ -178,14 +212,22 @@ def history():
 # ------------------------------------------------------------------
 @app.route("/")
 def index():
-    if not current_user_id():
-        return render_template("index.html", documents=[], authenticated=False)
+    uid = current_user_id()
+    if not uid:
+        return render_template("index.html", documents=[], authenticated=False, username="")
     docs = [
         {"id": d[0], "title": d[1], "source_type": d[2], "created_at": d[3]}
-        for d in kb.list_documents(current_user_id())
+        for d in kb.list_documents(uid)
     ]
-    return render_template("index.html", documents=docs, authenticated=True)
+    return render_template(
+        "index.html", documents=docs, authenticated=True, username=session.get("username", "")
+    )
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # debug mode lets anyone who reaches the server run code, so it is off unless asked for
+    app.run(
+        debug=os.environ.get("FLASK_DEBUG") == "1",
+        host=os.environ.get("HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT", 5000)),
+    )

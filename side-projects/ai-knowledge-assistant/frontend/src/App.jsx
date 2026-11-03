@@ -6,10 +6,16 @@ import HistoryList from "./components/HistoryList";
 import Login from "./components/Login";
 import Register from "./components/Register";
 
+function newSessionId() {
+  // crypto.randomUUID only exists on https/localhost, so keep a fallback
+  if (globalThis.crypto && globalThis.crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [sessionId] = useState(() => newSessionId());
 
   useEffect(() => {
     checkAuth();
@@ -87,7 +93,7 @@ export default function App() {
                 await fetch("/api/auth/logout", { method: "POST" });
                 handleLogout();
               }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md font-medium transition text-sm"
+              className="bg-indigo-800 hover:bg-indigo-900 text-white px-4 py-2 rounded-md font-medium transition text-sm"
             >
               Logout
             </button>

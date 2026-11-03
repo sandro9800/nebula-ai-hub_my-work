@@ -1,6 +1,6 @@
 # Personal AI Knowledge Assistant (RAG)
 
-A production-ready Retrieval-Augmented Generation (RAG) app with **user authentication**, **document chunking**, **PDF support**, **chat history**, and a **React + Tailwind** frontend.
+A full-stack Retrieval-Augmented Generation (RAG) app with **user accounts**, **document chunking**, **PDF support**, **chat history**, and a **React + Tailwind** frontend.
 
 Store text and PDF documents, then ask natural-language questions and get answers grounded in your documents — with sources cited.
 
@@ -11,14 +11,16 @@ Store text and PDF documents, then ask natural-language questions and get answer
 | Feature | Description |
 |---------|-------------|
 | 🔐 **User Authentication** | Register, login, password hashing, per-user document isolation |
-| 📄 **Document Upload** | Paste text or upload `.txt`, `.md`, `.pdf` files |
+| 📄 **Document Upload** | Paste text or upload `.txt`, `.md`, `.pdf` files (up to 16 MB) |
 | ✂️ **Smart Chunking** | Long documents are split into overlapping chunks for better retrieval |
 | 🔍 **Semantic Search** | sentence-transformers embeddings + cosine similarity |
 | 🤖 **Local LLM** | Ollama (e.g. `llama3.2`) — answers generated from your documents only |
-| 📚 **Source Citations** | Every answer cites the document(s) it used |
+| 📚 **Source Citations** | Every answer lists the document(s) it used |
 | ⏱️ **Chat History** | Conversation history persisted per user & session |
-| 🌐 **Full-Stack** | Flask REST API + React + Tailwind frontend |
-| 🐳 **Docker** | One-command deployment with Ollama |
+| 🌐 **Full-Stack** | Flask REST API + React + Tailwind frontend + simple built-in page |
+| 🐳 **Docker** | One-command start together with Ollama |
+
+If Ollama is not running, the app still answers with the most relevant excerpt from your own documents.
 
 ---
 
@@ -26,8 +28,8 @@ Store text and PDF documents, then ask natural-language questions and get answer
 
 | Layer | Technology |
 |-------|------------|
-| Language | Python 3.11, JavaScript (React 18) |
-| Backend | Flask, Flask-CORS |
+| Language | Python 3.11+, JavaScript (React 18) |
+| Backend | Flask, Flask-CORS, gunicorn |
 | Auth | Werkzeug password hashing, Flask sessions |
 | Embeddings | sentence-transformers (`all-MiniLM-L6-v2`) |
 | Similarity | NumPy (cosine similarity) |
@@ -43,23 +45,22 @@ Store text and PDF documents, then ask natural-language questions and get answer
 
 ```
 ai-knowledge-assistant/
-├── kb.py                # Core RAG: auth, chunking, embedding, search, LLM
+├── kb.py                # Core RAG: auth, chunking, embedding, search, LLM, CLI
 ├── app.py               # Flask backend + REST API (auth-protected)
-├── Dockerfile           # Production container image
-├── docker-compose.yml   # Backend + Ollama orchestration
+├── test_app.py          # Tests (uses a fake embedding model, runs in seconds)
+├── Dockerfile           # Container image
+├── docker-compose.yml   # Backend + Ollama
 ├── requirements.txt     # Python dependencies
-├── .gitignore
+├── LICENSE.txt
 ├── README.md            # This file
-├── knowledge.db         # Auto-created SQLite database
 ├── templates/
-│   └── index.html       # Simple Flask fallback UI
+│   └── index.html       # Simple built-in page (login, add documents, ask)
 └── frontend/            # React + Tailwind frontend
     ├── package.json
     ├── vite.config.js
     ├── tailwind.config.js
     ├── postcss.config.js
     ├── index.html
-    ├── .gitignore
     └── src/
         ├── main.jsx
         ├── index.css
@@ -73,13 +74,15 @@ ai-knowledge-assistant/
             └── HistoryList.jsx
 ```
 
+The SQLite database (`knowledge.db`) is created automatically on first run and is not committed.
+
 ---
 
 ## Quick Start — Local Development
 
 ### 1. Install Python dependencies
 ```bash
-cd ai-knowledge-assistant
+cd side-projects/ai-knowledge-assistant
 pip install -r requirements.txt
 ```
 
@@ -93,15 +96,15 @@ ollama pull llama3.2
 ### 3. Start the backend
 ```bash
 python app.py
-# API runs at http://localhost:5000
+# API and built-in page: http://localhost:5000
 ```
 
-### 4. Start the frontend (separate terminal)
+### 4. Start the React frontend (separate terminal)
 ```bash
 cd frontend
 npm install
 npm run dev
-# Open http://localhost:5173
+# Open http://localhost:5173  (it forwards /api to the backend on port 5000)
 ```
 
 ### 5. Or use the CLI
@@ -110,109 +113,73 @@ python kb.py
 # Commands: register, login, add, pdf, ask, list, history, quit
 ```
 
+### Run the tests
+```bash
+pip install -r requirements.txt
+python -m unittest -v
+```
+
 ---
 
-## Docker Deployment (Recommended)
+## Docker
 
-### One-command start
 ```bash
 docker compose up --build
 ```
 
-This starts **Ollama** (port 11434) and **Backend API** (port 5000).
+This starts **Ollama** (port 11434) and the **backend** (port 5000). Open `http://localhost:5000` for the built-in page. The React frontend is run separately with `npm run dev` (see above).
 
-### Pull the LLM model inside the container
+Pull the LLM model once:
 ```bash
 docker compose exec ollama ollama pull llama3.2
 ```
 
-### Stop
+The database is kept in a Docker volume (`kb_data`), so it survives restarts. Stop everything with:
 ```bash
 docker compose down
 ```
 
----
-
-## Deployment Guides
-
-### Option A: Render (Backend + Ollama separately)
-
-Render doesn't easily run Ollama, so deploy Ollama on a separate VM or use a GPU service, then point the backend at it.
-
-#### 1. Backend on Render
-1. Push this repo to GitHub.
-2. In Render, create a **Web Service** from your repo.
-3. Set these environment variables:
-   - `OLLAMA_URL` → `https://your-ollama-instance.com/api/generate`
-   - `OLLAMA_MODEL` → `llama3.2`
-   - `SECRET_KEY` → a random secure string
-4. Build command: `pip install -r requirements.txt`
-5. Start command: `gunicorn -w 4 -k gthread app:app` (or `python app.py`)
-6. Add a **Disk** mounted at `/app` if you want `knowledge.db` to persist.
-
-#### 2. Ollama (separate)
-Run Ollama on a GPU-capable VM (e.g., RunPod, Lambda Labs, or a dedicated server) and expose port 11434 publicly (with authentication if needed).
-
-#### 3. Frontend
-Build the React app:
+Set your own secret before real use: create a `.env` file next to `docker-compose.yml`:
 ```bash
-cd frontend
-npm install
-npm run build
-```
-Deploy the `dist/` folder to Vercel, Netlify, or GitHub Pages. Set the API base URL to your Render backend.
-
----
-
-### Option B: Railway
-
-Railway makes it easy to deploy both services.
-
-#### 1. Backend
-1. Connect your GitHub repo to Railway.
-2. Add a **Dockerfile** service pointing at `Dockerfile`.
-3. Add environment variables:
-   - `OLLAMA_URL` → your Ollama endpoint
-   - `OLLAMA_MODEL` → `llama3.2`
-   - `SECRET_KEY` → random string
-4. Railway will auto-detect the port from `EXPOSE 5000`.
-
-#### 2. Ollama
-Add an Ollama service from the Railway template or deploy `ollama/ollama` as a Docker service.
-
-#### 3. Frontend
-Deploy the `frontend/` folder as a static site or Vite build on Railway/Vercel.
-
----
-
-### Option C: Docker Compose on a VPS (DigitalOcean, Hetzner, AWS EC2)
-
-```bash
-# On your server
-git clone <your-repo>
-cd ai-knowledge-assistant
-
-# Create .env
 echo "SECRET_KEY=$(openssl rand -hex 32)" > .env
-echo "OLLAMA_URL=http://localhost:11434/api/generate" >> .env
-echo "OLLAMA_MODEL=llama3.2" >> .env
-
-# Start
-docker compose up -d --build
-
-# Pull model
-docker exec -it <ollama_container> ollama pull llama3.2
 ```
+
+---
+
+## Configuration
+
+All settings are environment variables.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `SECRET_KEY` | dev placeholder (a warning is printed) | Signs the login cookie. **Set it in production.** |
+| `OLLAMA_URL` | `http://localhost:11434/api/generate` | Where Ollama listens |
+| `OLLAMA_MODEL` | `llama3.2` | Model used for answers |
+| `KNOWLEDGE_DB` | `knowledge.db` | Path of the SQLite file |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated origins allowed to call the API with cookies |
+| `HOST` | `127.0.0.1` | Address `python app.py` listens on |
+| `PORT` | `5000` | Port |
+| `FLASK_DEBUG` | off | Set to `1` for debug mode (never on a public server) |
+
+---
+
+## Deployment notes
+
+- **Backend** (Render, Railway, a VPS): build with `pip install -r requirements.txt` and start with
+  `gunicorn -w 1 --threads 4 --timeout 120 -b 0.0.0.0:$PORT app:app`.
+  Set `SECRET_KEY`, `OLLAMA_URL` and `OLLAMA_MODEL`. To keep the database, mount a disk (for example at `/data`) and set `KNOWLEDGE_DB=/data/knowledge.db`. With the included `Dockerfile` this is already done.
+- **Ollama** needs a machine with enough memory (ideally a GPU). Run it on its own server or service and point `OLLAMA_URL` at it.
+- **Frontend:** the React app calls relative `/api/...` URLs, so it must be served from the same domain as the backend or behind a proxy/rewrite to it. If you only need a simple UI, use the built-in page that the backend serves at `/`.
 
 ---
 
 ## API Reference
 
-All endpoints require authentication (session cookie) unless noted.
+All endpoints need the login session cookie unless noted.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/auth/register` | POST | `{ "username", "password" }` |
+| `/api/auth/register` | POST | `{ "username", "password" }` (password at least 6 characters) |
 | `/api/auth/login` | POST | `{ "username", "password" }` |
 | `/api/auth/logout` | POST | Clear session |
 | `/api/auth/me` | GET | Check auth status |
@@ -222,11 +189,14 @@ All endpoints require authentication (session cookie) unless noted.
 | `/api/ask` | POST | `{ "query", "session_id" }` |
 | `/api/history` | GET | `?session_id=...&limit=20` |
 
-### Example: Ask via curl
+### Example: log in and ask with curl
 ```bash
-curl -X POST http://localhost:5000/api/ask \
+curl -c cookies.txt -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
-  -b cookies.txt \
+  -d '{"username":"sandro","password":"mypassword"}'
+
+curl -b cookies.txt -X POST http://localhost:5000/api/ask \
+  -H "Content-Type: application/json" \
   -d '{"query":"What is the vacation policy?","session_id":"user-123"}'
 ```
 
@@ -235,12 +205,12 @@ curl -X POST http://localhost:5000/api/ask \
 ## Example Usage
 
 **Web UI:**
-1. Register / Login at `http://localhost:5173`
-2. Add a document titled "Company Policy" (paste text or upload PDF)
+1. Register / Login at `http://localhost:5173` (React) or `http://localhost:5000` (built-in page)
+2. Add a document titled "Company Policy" (paste text or upload a PDF)
 3. Ask: "What is the vacation policy?"
 4. Receive an answer with source citations like `[1] Company Policy`
 
-**CLI:**
+**CLI** (quote titles that contain spaces):
 ```bash
 > register sandro mypassword
 User created with id 1
@@ -250,7 +220,7 @@ Logged in as user #1
 Added document #1: Meeting Notes
 > pdf "Employee Handbook" handbook.pdf
 Added PDF document #2: Employee Handbook
-> ask "What was decided about the budget?"
+> ask What was decided about the budget?
 [Answer with citations]
 Sources:
   - [1] Meeting Notes
@@ -259,13 +229,18 @@ Sources:
 
 ---
 
+## Known limitations
+
+- Search compares the question with every stored chunk, which is fine for personal use but slow for very large collections.
+- Only text-based PDFs work (scanned images have no text to extract).
+- No rate limiting and no password reset.
+
 ## Extending It
 
-- **Swap the LLM** — change `OLLAMA_MODEL` or use OpenAI/Anthropic API in `kb.py`
+- **Swap the LLM** — change `OLLAMA_MODEL` or use the OpenAI/Anthropic API in `kb.py`
 - **Real vector DB** — replace NumPy search with Chroma, pgvector, or Pinecone
-- **PDF chunking by pages** — already chunked by character; can be improved with page-aware splits
-- **Document editing** — add PUT endpoint to update document content
-- **User roles** — add admin role for global document management
+- **PDF chunking by pages** — chunks are character based now; page-aware splits would be better
+- **Document editing** — add a PUT endpoint to update document content
 - **Rate limiting** — add Flask-Limiter for API protection
 
 ---
