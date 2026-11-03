@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knowledge Assistant</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }
+  textarea, input { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 6px; }
+  button { background: #2563eb; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background: #fafafa; }
+  .source { font-size: 0.875rem; color: #666; margin-top: 0.5rem; }
+  .answer { white-space: pre-wrap; background: #fff; border-left: 3px solid #2563eb; padding: 0.75rem; margin-top: 0.5rem; }
+  h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+  label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>🧠 Personal Knowledge Assistant</h1>
+
+<section>
+  <h2>Add a document</h2>
+  <form id="addForm">
+    <label>Title</label>
+    <input type="text" name="title" required>
+    <label>Content (or upload .txt/.md)</label>
+    <textarea name="content" rows="6" required></textarea>
+    <input type="file" name="file" accept=".txt,.md">
+    <button type="submit">Add</button>
+  </form>
+</section>
+
+<section>
+  <h2>Ask a question</h2>
+  <form id="askForm">
+    <label>Question</label>
+    <input type="text" name="query" placeholder="e.g. What did the meeting say about deadlines?" required>
+    <button type="submit">Ask</button>
+  </form>
+  <div id="result"></div>
+</section>
+
+<section>
+  <h2>Documents</h2>
+  <ul id="docList">
+    {% for doc in documents %}
+      <li>[{{ doc.id }}] {{ doc.title }}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<script>
+document.getElementById('addForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  const res = await fetch('/api/documents', { method: 'POST', body: form });
+  if (res.ok) {
+    const data = await res.json();
+    const li = document.createElement('li');
+    li.textContent = `[${data.id}] ${data.title}`;
+    document.getElementById('docList').prepend(li);
+    e.target.reset();
+  } else {
+    alert('Failed to add document');
+  }
+};
+
+document.getElementById('askForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  const res = await fetch('/api/ask', { method: 'POST', body: form });
+  const data = await res.json();
+  const box = document.getElementById('result');
+  box.innerHTML = '<div class="answer">' + data.answer.replace(/\n/g, '<br>') + '</div>';
+  if (data.sources?.length) {
+    box.innerHTML += '<div class="source"><strong>Sources:</strong> ' +
+      data.sources.map(s => `[${s.id}] ${s.title}`).join(', ') + '</div>';
+  }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+id,date,category,amount,description
+1,2026-11-03,Food,12.5,Lunch with friend
+2,2026-11-03,Transport,45.0,Weekly bus pass
+3,2026-11-03,Coffee,8.99,Morning coffee
+4,2026-11-03,Food,25.0,Dinner
+5,2026-11-03,Transport,15.0,Taxi
