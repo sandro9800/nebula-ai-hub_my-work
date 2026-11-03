@@ -42,7 +42,7 @@ Store text and PDF documents, then ask natural-language questions and get answer
 ## Project Structure
 
 ```
-ai_knowledge_assistant/
+ai-knowledge-assistant/
 ├── kb.py                # Core RAG: auth, chunking, embedding, search, LLM
 ├── app.py               # Flask backend + REST API (auth-protected)
 ├── Dockerfile           # Production container image
@@ -79,7 +79,7 @@ ai_knowledge_assistant/
 
 ### 1. Install Python dependencies
 ```bash
-cd ai_knowledge_assistant
+cd ai-knowledge-assistant
 pip install -r requirements.txt
 ```
 
@@ -123,7 +123,7 @@ This starts **Ollama** (port 11434) and **Backend API** (port 5000).
 
 ### Pull the LLM model inside the container
 ```bash
-docker exec -it ai_knowledge_assistant_ollama_1 ollama pull llama3.2
+docker compose exec ollama ollama pull llama3.2
 ```
 
 ### Stop
@@ -190,7 +190,7 @@ Deploy the `frontend/` folder as a static site or Vite build on Railway/Vercel.
 ```bash
 # On your server
 git clone <your-repo>
-cd ai_knowledge_assistant
+cd ai-knowledge-assistant
 
 # Create .env
 echo "SECRET_KEY=$(openssl rand -hex 32)" > .env

@@ -17,7 +17,7 @@ A beginner-friendly Python CLI app to record, list, delete, and summarize your p
 
 ### 1. Clone / open the folder
 ```bash
-cd expense_tracker
+cd expense-tracker
 ```
 
 ### 2. Run the app
@@ -77,7 +77,7 @@ The app detects `rich` automatically and uses it if available. It works fine wit
 ## Project Structure
 
 ```
-expense_tracker/
+expense-tracker/
 ├── tracker.py      # Main CLI application
 ├── README.md       # This file
 └── expenses.json   # Auto-created data file (not committed)
