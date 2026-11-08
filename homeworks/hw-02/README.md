@@ -12,6 +12,7 @@ Go through the week 2 class material (string methods, lists, tuples, sets, while
 - the old store order system that was left commented out in the class file is not repeated, it is already in `hw-01`
 
 ## Files
+- `main.py` — original class code (both class files, all commented out)
 - `main_improved.py` — working version with short comments
 
 ## How to run
