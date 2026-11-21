@@ -1,7 +1,3 @@
-# LeetCode 125. Valid Palindrome
-# Idea: two pointers, skip non-alphanumeric characters, compare lowercase letters.
-
-
 class Solution:
     def isPalindrome(self, s):
         left, right = 0, len(s) - 1
@@ -17,6 +13,5 @@ class Solution:
         return True
 
 
-# quick check
-print(Solution().isPalindrome("A man, a plan, a canal: Panama"))  # True
-print(Solution().isPalindrome("race a car"))  # False
+print(Solution().isPalindrome("A man, a plan, a canal: Panama"))
+print(Solution().isPalindrome("race a car"))
