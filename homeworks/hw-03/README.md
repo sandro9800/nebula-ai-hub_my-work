@@ -7,3 +7,5 @@
 | 242 | Valid Anagram | `valid_anagram_242.py` | letter counts |
 | 217 | Contains Duplicate | `contains_duplicate_217.py` | set |
 | 26 | Remove Duplicates from Sorted Array | `remove_duplicates_from_sorted_array_26.py` | slow/fast pointers |
+
+Each solution also has a flat `_improved.py` version (no class, short comments, test inputs) that runs with `python <name>_improved.py`.
