@@ -1,7 +1,3 @@
-# LeetCode 242. Valid Anagram
-# Idea: count letters of s up, letters of t down; all counts must end at zero.
-
-
 class Solution:
     def isAnagram(self, s, t):
         if len(s) != len(t):
@@ -16,6 +12,5 @@ class Solution:
         return True
 
 
-# quick check
-print(Solution().isAnagram("anagram", "nagaram"))  # True
-print(Solution().isAnagram("rat", "car"))  # False
+print(Solution().isAnagram("anagram", "nagaram"))
+print(Solution().isAnagram("rat", "car"))
