@@ -7,3 +7,4 @@ Copy `_template/` to start a new one.
 |---|------|--------|-------|
 | 01 | Online store order system (discounts, promo code, delivery, payment) | done | - |
 | 02 | Week 2 class material: string methods, lists, tuples, sets, while loop | done | - |
+| 03 | Week 3 LeetCode: reverse string, valid palindrome, valid anagram, contains duplicate, remove duplicates | done | - |
